@@ -109,6 +109,11 @@ class RecurrentCache(Cache):
 
         cache = cls(seen_tokens)
         if past_key_values is not None:
+            if isinstance(past_key_values, Cache):
+                if hasattr(past_key_values, "to_legacy_cache"):
+                    past_key_values = past_key_values.to_legacy_cache()
+                else:
+                    past_key_values = tuple(past_key_values)
             for layer_idx in range(len(past_key_values)):
                 cache.update(past_key_values[layer_idx], layer_idx)
         return cache

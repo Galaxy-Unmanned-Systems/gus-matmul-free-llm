@@ -135,9 +135,30 @@ template <typename T> T swiglu_bwd_with_output(T x, T y, T g, T& dx, T& dy, T& z
 }
 """
 
-swiglu_fwd = torch.cuda.jiterator._create_jit_fn(swiglu_fwd_codestring)
-swiglu_bwd = torch.cuda.jiterator._create_multi_output_jit_fn(swiglu_bwd_codestring, num_outputs=2)
-swiglu_bwd_with_output = torch.cuda.jiterator._create_multi_output_jit_fn(swiglu_bwd_with_output_codestring, num_outputs=3)
+if torch.cuda.is_available():
+    swiglu_fwd = torch.cuda.jiterator._create_jit_fn(swiglu_fwd_codestring)
+    swiglu_bwd = torch.cuda.jiterator._create_multi_output_jit_fn(swiglu_bwd_codestring, num_outputs=2)
+    swiglu_bwd_with_output = torch.cuda.jiterator._create_multi_output_jit_fn(
+        swiglu_bwd_with_output_codestring, num_outputs=3
+    )
+else:
+    def swiglu_fwd(x, y):
+        return F.silu(x) * y
+
+    def swiglu_bwd(x, y, g):
+        x_sigmoid = torch.sigmoid(x)
+        x_swish_grad = x_sigmoid * (1 + x * (1 - x_sigmoid))
+        dx = x_swish_grad * g * y
+        dy = F.silu(x) * g
+        return dx.to(dtype=x.dtype), dy.to(dtype=y.dtype)
+
+    def swiglu_bwd_with_output(x, y, g):
+        z = F.silu(x) * y
+        x_sigmoid = torch.sigmoid(x)
+        x_swish_grad = x_sigmoid * (1 + x * (1 - x_sigmoid))
+        dx = x_swish_grad * g * y
+        dy = F.silu(x) * g
+        return dx.to(dtype=x.dtype), dy.to(dtype=y.dtype), z.to(dtype=x.dtype)
 
 
 class SwiGLUFunction(torch.autograd.Function):
